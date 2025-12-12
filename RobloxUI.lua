@@ -11,6 +11,8 @@ local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 
 local Library = {}
+Library.Flags = {} -- Stores the values for saving
+Library.Items = {} -- Stores the objects for updating visuals
 
 -- >> THEME CONFIGURATION
 local Theme = {
@@ -25,6 +27,26 @@ local Theme = {
     Font = Enum.Font.GothamBold,
     CornerRadius = UDim.new(0, 6)
 }
+
+local function ToColor3(col)
+    if typeof(col) == "Color3" then return col end
+    if typeof(col) == "table" then return Color3.new(col.R, col.G, col.B) end
+    return Color3.new(1,1,1)
+end
+
+local function FromColor3(col)
+    if typeof(col) == "Color3" then return {R = col.R, G = col.G, B = col.B} end
+    return {R=1, G=1, B=1}
+end
+
+-- >> HELPER: UI CREATION
+local function Create(class, props)
+    local obj = Instance.new(class)
+    for k, v in pairs(props) do
+        obj[k] = v
+    end
+    return obj
+end
 
 -- >> HELPER FUNCTIONS
 local function MakeDraggable(topbarobject, object)
@@ -72,6 +94,53 @@ local function Create(class, props)
         obj[k] = v
     end
     return obj
+end
+
+function Library:SaveConfiguration(FileName)
+    if not isfolder("GeminiConfig") then makefolder("GeminiConfig") end
+    local path = "GeminiConfig/" .. FileName .. ".json"
+    
+    -- Create a deep copy to handle userdata serialization
+    local SaveData = {}
+    for flag, value in pairs(Library.Flags) do
+        if typeof(value) == "Color3" then
+            SaveData[flag] = FromColor3(value)
+        elseif typeof(value) == "EnumItem" then
+            SaveData[flag] = tostring(value)
+        else
+            SaveData[flag] = value
+        end
+    end
+    
+    writefile(path, HttpService:JSONEncode(SaveData))
+end
+
+function Library:LoadConfiguration(FileName)
+    local path = "GeminiConfig/" .. FileName .. ".json"
+    if not isfile(path) then return end
+    
+    local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+    if not success then return end
+
+    for flag, value in pairs(decoded) do
+        -- Check if it's a registered UI element
+        if Library.Items[flag] then
+            local Item = Library.Items[flag]
+            
+            -- Handle Color Conversion
+            if Item.Type == "ColorPicker" and typeof(value) == "table" then
+                value = ToColor3(value)
+            end
+            
+            -- Update the internal flag
+            Library.Flags[flag] = value
+            
+            -- Update the Visuals and Fire Callback
+            if Item.Function then
+                Item.Function(value)
+            end
+        end
+    end
 end
 
 -- >> MAIN WINDOW FUNCTION
